@@ -13,6 +13,7 @@ RUN apt-get update && \
       g++\
       git \
       cmake \
+      libssl-dev \
       libboost-all-dev \
       librocksdb-dev && \
     git clone https://github.com/kosonproject/koson.git /opt/koson && \
