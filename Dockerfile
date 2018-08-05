@@ -1,45 +1,51 @@
-FROM debian:9 as builder
+# Multistage docker build, requires docker 17.05
 
-# install build dependencies
-# checkout the latest tag
-# build and install
+# builder stage
+FROM ubuntu:16.04 as builder
+
 RUN apt-get update && \
-    apt-get install -y \
-      build-essential \
-      gdb \
-      libreadline-dev \
-      python-dev \
-      gcc \
-      g++\
-      git \
-      cmake \
-      libssl-dev \
-      libboost-all-dev \
-      librocksdb-dev && \
-    git clone https://github.com/kosonproject/koson.git /opt/koson && \
-    cd /opt/koson && \
-    mkdir build && \
-    cd build && \
-    export CXXFLAGS="-w -std=gnu++11" && \
-    #cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-fassociative-math" -DCMAKE_CXX_FLAGS="-fassociative-math" -DSTATIC=true -DDO_TESTS=OFF .. && \
-    make -j$(nproc)
+    apt-get --no-install-recommends --yes install \
+        ca-certificates \
+        cmake \
+        g++ \
+        libboost1.58-all-dev \
+        libssl-dev \
+        libzmq3-dev \
+        libreadline-dev \
+        libsodium-dev \
+        make \
+        pkg-config \
+        graphviz \
+        doxygen \
+        git
 
-FROM debian:9
+RUN git clone https://github.com/kosonproject/koson.git /src
+WORKDIR /src
+#COPY . .
 
-# Daemon needs libreadline 
+ARG NPROC
+RUN rm -rf build && \
+    if [ -z "$NPROC" ];then make -j$(nproc) release-static;else make -j$NPROC release-static;fi
+
+# runtime stage
+FROM ubuntu:16.04
+
 RUN apt-get update && \
-    apt-get install -y \
-      libreadline-dev \
-     && rm -rf /var/lib/apt/lists/*
+    apt-get --no-install-recommends --yes install ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt
 
-RUN mkdir -p /usr/local/bin && mkdir -p /tmp/checkpoints 
+COPY --from=builder /src/build/release/bin/* /usr/local/bin/
 
-WORKDIR /usr/local/bin
-COPY --from=builder /opt/koson/build/src/kosond .
-COPY --from=builder /opt/koson/build/src/koson-wallet-rpc .
-COPY --from=builder /opt/koson/build/src/koson-wallet-cli .
-RUN mkdir -p /var/lib/koson
-WORKDIR /var/lib/koson
-ENTRYPOINT ["/usr/local/bin/Daemon"]
-CMD ["--no-console","--data-dir","/var/lib/koson","--rpc-bind-ip","0.0.0.0","--rpc-bind-port","13002","--p2p-bind-port","13001"]
+# Contains the blockchain
+VOLUME /root/.koson
+
+# Generate your wallet via accessing the container and run:
+# cd /wallet
+# koson-wallet-cli
+VOLUME /wallet
+
+EXPOSE 15301
+EXPOSE 15302
+
+ENTRYPOINT ["kosond", "--p2p-bind-ip=0.0.0.0", "--p2p-bind-port=15301", "--rpc-bind-ip=0.0.0.0", "--rpc-bind-port=15302", "--non-interactive"]
