@@ -3,6 +3,11 @@
 # builder stage
 FROM ubuntu:16.04 as builder
 
+# BUILD_DATE and VCS_REF are immaterial, since this is a 2-stage build, but our build
+# hook won't work unless we specify the args
+ARG BUILD_DATE
+ARG VCS_REF
+
 RUN apt-get update && \
     apt-get --no-install-recommends --yes install \
         ca-certificates \
